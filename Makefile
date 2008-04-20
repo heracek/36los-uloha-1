@@ -13,3 +13,5 @@ dohnaj1:dohnaj1.c
 clear:
 	\rm dohnaj1 
 
+run:dohnaj1
+	./dohnaj1 ftp.dump 85.71.135.84 21 192.168.72.151 57073

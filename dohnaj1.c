@@ -9,14 +9,6 @@
 
 int packet_counter = 0; 
 
-/* 4 bytes IP address */
-typedef struct ip_address{
-    u_char byte1;
-    u_char byte2;
-    u_char byte3;
-    u_char byte4;
-}ip_address;
-
 /* 6 bytes MAC address */
 typedef struct mac_address{
     u_char byte1;
@@ -27,17 +19,6 @@ typedef struct mac_address{
     u_char byte6;
 }mac_address;
 
-/* TCP control bits */
-typedef struct control_bits{
-	unsigned URG : 1; 
-	unsigned ACK : 1; 
-	unsigned PSH : 1; 
-	unsigned RST : 1; 
-	unsigned SYN : 1; 
-	unsigned FIN : 1; 
-	unsigned TMP : 2; 
-}control_bits;
-
 /* Ether header */
 typedef struct eth_header{
     mac_address  saddr;     // Source address
@@ -45,6 +26,13 @@ typedef struct eth_header{
     u_short typlen;       	// Type / Length
 }eth_header;
 
+/* 4 bytes IP address */
+typedef struct ip_address{
+    u_char byte1;
+    u_char byte2;
+    u_char byte3;
+    u_char byte4;
+}ip_address;
 
 /* IPv4 header */
 typedef struct ip_header{
@@ -69,6 +57,17 @@ typedef struct udp_header{
     u_short crc;            // Checksum
 }udp_header;
 
+/* TCP control bits */
+typedef struct control_bits{
+	unsigned URG : 1; 
+	unsigned ACK : 1; 
+	unsigned PSH : 1; 
+	unsigned RST : 1; 
+	unsigned SYN : 1; 
+	unsigned FIN : 1; 
+	unsigned TMP : 2; 
+}control_bits;
+
 /* TCP header*/
 typedef struct tcp_header{
     u_short sport;          // Source port
@@ -83,8 +82,14 @@ typedef struct tcp_header{
 }tcp_header;
 
 
+/* global variables */
+ip_address IP1;
+u_short PORT1;
+ip_address IP2;
+u_short PORT2;
 
 /* prototype of the packet handler */
+void textIP2structIP(char *text_ip, ip_address *struct_ip);
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void IPpacket_handler(const struct ip_header *IPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
@@ -94,13 +99,43 @@ int main(int argc, char *argv[])
 {
     pcap_t *in = NULL;
     char errbuf[PCAP_ERRBUF_SIZE + 1];
-    if (1 != argc) { fprintf(stderr, "usage: %s IP IP \n",argv[0]); exit(1); }
-    in = pcap_open_offline("-", errbuf);
-    if (NULL == in) { fprintf(stderr, "stdin: %s", errbuf);	exit(1); }
+    if (6 != argc) {
+        fprintf(stderr, "usage: %s soubor.vstup IP1 port IP2 port \n",argv[0]);
+        exit(1);
+    }
+    
+    in = pcap_open_offline(argv[1], errbuf);
+    if (NULL == in) {
+        fprintf(stderr, "stdin: %s", errbuf);
+        exit(1);
+    }
+    
+    textIP2structIP(argv[2], &IP1);
+    sscanf(argv[3], "%d", &PORT1);
+    printf("IP1: %d.%d.%d.%d:%d\n", IP1.byte1, IP1.byte2, IP1.byte3, IP1.byte4, PORT1);
+    
+    textIP2structIP(argv[4], &IP2);
+    sscanf(argv[5], "%d", &PORT2);
+    printf("IP2: %d.%d.%d.%d:%d\n", IP2.byte1, IP2.byte2, IP2.byte3, IP2.byte4, PORT2);
+    
     pcap_loop(in, 0, packet_handler, NULL);
     exit(0);
 }
 
+void textIP2structIP(char *text_ip, ip_address *struct_ip) {
+    unsigned int ip_addr_segments[4];
+    sscanf(text_ip, "%d.%d.%d.%d",
+        ip_addr_segments,
+        ip_addr_segments + 1,
+        ip_addr_segments + 2,
+        ip_addr_segments + 3
+    );
+    
+    struct_ip->byte1 = ip_addr_segments[0];
+    struct_ip->byte2 = ip_addr_segments[1];
+    struct_ip->byte3 = ip_addr_segments[2];
+    struct_ip->byte4 = ip_addr_segments[3];
+}
 
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
     eth_header *ETHh;
