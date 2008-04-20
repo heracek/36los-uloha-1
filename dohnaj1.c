@@ -127,6 +127,9 @@ int main(int argc, char *argv[])
     
     fclose(OUT_DATA);
     fclose(OUT_INFO);
+    
+    printf("\n\nall ok\n");
+    
     exit(0);
 }
 
@@ -190,7 +193,7 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     fprintf(OUT_INFO, "\t\tsource: %d.%d.%d.%d:%d\n\t\tdestination: %d.%d.%d.%d:%d\n",
     		IPh->saddr.byte1,IPh->saddr.byte2,IPh->saddr.byte3,IPh->saddr.byte4,sport,
     		IPh->daddr.byte1,IPh->daddr.byte2,IPh->daddr.byte3,IPh->daddr.byte4,dport);
-    fprintf(OUT_INFO, "\t\tSYNC#: %d\n\t\tACK#: %d\n",TCPh->seqnum,TCPh->acknum);
+    fprintf(OUT_INFO, "\t\tSYNC#: %lu\n\t\tACK#: %lu\n",TCPh->seqnum,TCPh->acknum);
     fprintf(OUT_INFO, "\t\tData: ");
       /* Print the packet */
     for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++) fprintf(OUT_INFO, "%c", pkt_data[i-1]);
