@@ -87,6 +87,8 @@ ip_address IP1;
 u_short PORT1;
 ip_address IP2;
 u_short PORT2;
+FILE* OUT_DATA;
+FILE* OUT_INFO;
 
 /* prototype of the packet handler */
 void textIP2structIP(char *text_ip, ip_address *struct_ip);
@@ -110,26 +112,27 @@ int main(int argc, char *argv[])
         exit(1);
     }
     
+    OUT_INFO = fopen("out.info", "w");
+    OUT_DATA = fopen("out.data", "w");
+    
     textIP2structIP(argv[2], &IP1);
     sscanf(argv[3], "%d", &PORT1);
-    printf("IP1: %d.%d.%d.%d:%d\n", IP1.byte1, IP1.byte2, IP1.byte3, IP1.byte4, PORT1);
+    fprintf(OUT_INFO, "address 1: %d.%d.%d.%d:%d\n", IP1.byte1, IP1.byte2, IP1.byte3, IP1.byte4, PORT1);
     
     textIP2structIP(argv[4], &IP2);
     sscanf(argv[5], "%d", &PORT2);
-    printf("IP2: %d.%d.%d.%d:%d\n", IP2.byte1, IP2.byte2, IP2.byte3, IP2.byte4, PORT2);
+    fprintf(OUT_INFO, "address 2: %d.%d.%d.%d:%d\n\n", IP2.byte1, IP2.byte2, IP2.byte3, IP2.byte4, PORT2);
     
     pcap_loop(in, 0, packet_handler, NULL);
+    
+    fclose(OUT_DATA);
+    fclose(OUT_INFO);
     exit(0);
 }
 
 void textIP2structIP(char *text_ip, ip_address *struct_ip) {
-    unsigned int ip_addr_segments[4];
-    sscanf(text_ip, "%d.%d.%d.%d",
-        ip_addr_segments,
-        ip_addr_segments + 1,
-        ip_addr_segments + 2,
-        ip_addr_segments + 3
-    );
+    unsigned int ip_addr_segments[4]; // scanf requires int
+    sscanf(text_ip, "%d.%d.%d.%d", ip_addr_segments, ip_addr_segments + 1, ip_addr_segments + 2, ip_addr_segments + 3);
     
     struct_ip->byte1 = ip_addr_segments[0];
     struct_ip->byte2 = ip_addr_segments[1];
@@ -177,19 +180,19 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     sport = ntohs( TCPh->sport );
     dport = ntohs( TCPh->dport );
 
-	printf("%d. packet (type: ",packet_counter++);
-	if(TCPh->ControlBits.SYN == 1 && TCPh->ControlBits.ACK == 1) printf("SYNC - ACK");
-    else if(TCPh->ControlBits.SYN == 1) printf("SYNC");
-    else if(TCPh->ControlBits.ACK == 1) printf("ACK");
-    else printf("don't care ;)");
-    printf(")\n");
+	fprintf(OUT_INFO, "%d. packet (type: ",packet_counter++);
+	if(TCPh->ControlBits.SYN == 1 && TCPh->ControlBits.ACK == 1) fprintf(OUT_INFO, "SYNC - ACK");
+    else if(TCPh->ControlBits.SYN == 1) fprintf(OUT_INFO, "SYNC");
+    else if(TCPh->ControlBits.ACK == 1) fprintf(OUT_INFO, "ACK");
+    else fprintf(OUT_INFO, "don't care ;)");
+    fprintf(OUT_INFO, ")\n");
     /* print ip addresses and udp ports */
-    printf("\t\tsource: %d.%d.%d.%d:%d\n\t\tdestination: %d.%d.%d.%d:%d\n",
+    fprintf(OUT_INFO, "\t\tsource: %d.%d.%d.%d:%d\n\t\tdestination: %d.%d.%d.%d:%d\n",
     		IPh->saddr.byte1,IPh->saddr.byte2,IPh->saddr.byte3,IPh->saddr.byte4,sport,
     		IPh->daddr.byte1,IPh->daddr.byte2,IPh->daddr.byte3,IPh->daddr.byte4,dport);
-    printf("\t\tSYNC#: %d\n\t\tACK#: %d\n",TCPh->seqnum,TCPh->acknum);
-    printf("\t\tData: ");
+    fprintf(OUT_INFO, "\t\tSYNC#: %d\n\t\tACK#: %d\n",TCPh->seqnum,TCPh->acknum);
+    fprintf(OUT_INFO, "\t\tData: ");
       /* Print the packet */
-    for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++) printf("%c", pkt_data[i-1]);
-    printf("\n");
+    for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++) fprintf(OUT_INFO, "%c", pkt_data[i-1]);
+    fprintf(OUT_INFO, "\n");
 }
