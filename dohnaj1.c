@@ -58,15 +58,10 @@ typedef struct udp_header{
 }udp_header;
 
 /* TCP control bits */
-typedef struct control_bits{
-	unsigned URG : 1; 
-	unsigned ACK : 1; 
-	unsigned PSH : 1; 
-	unsigned RST : 1; 
-	unsigned SYN : 1; 
-	unsigned FIN : 1; 
-	unsigned TMP : 2; 
-}control_bits;
+typedef unsigned char control_bits;
+enum control_bits_flags { CWR = 128, ECE = 64, URG = 32, ACK = 16, PSH = 8, RST = 4, SYN = 2, FIN = 1 };
+control_bits control_bits_flags_array[] = { CWR, ECE, URG, ACK, PSH, RST, SYN, FIN };
+char* control_bits_flags_names[] = { "CWR", "ECE", "URG", "ACK", "PSH", "RST", "SYN", "FIN" };
 
 /* TCP header*/
 typedef struct tcp_header{
@@ -92,6 +87,9 @@ FILE* OUT_INFO;
 
 /* prototype of the packet handler */
 void textIP2structIP(char *text_ip, ip_address *struct_ip);
+int are_ip_addresses_eql(ip_address *ip_address_1, ip_address *ip_address_2);
+int global_communication_filter_ok(const struct ip_header *IPh, const struct tcp_header *TCPh);
+void print_tcp_control_bits(control_bits *pbits);
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void IPpacket_handler(const struct ip_header *IPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
@@ -143,6 +141,64 @@ void textIP2structIP(char *text_ip, ip_address *struct_ip) {
     struct_ip->byte4 = ip_addr_segments[3];
 }
 
+/**
+ * Returns 1 if (ip_address_1 == ip_address_2). Else returns 0.
+ */
+int are_ip_addresses_eql(ip_address *ip_address_1, ip_address *ip_address_2) {
+    if (ip_address_1->byte1 == ip_address_2->byte1 &&
+        ip_address_1->byte2 == ip_address_2->byte2 &&
+        ip_address_1->byte3 == ip_address_2->byte3 &&
+        ip_address_1->byte4 == ip_address_2->byte4
+    ) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Returns 1 if communication is betwen IP1:PORT1 and IP2:PORT2. Else reutrns 0.
+ */
+int global_communication_filter_ok(const struct ip_header *IPh, const struct tcp_header *TCPh) {
+    u_short sport = ntohs( TCPh->sport );
+    u_short dport = ntohs( TCPh->dport );
+    
+    /* src is IP1 - dest is IP2 */
+    if (are_ip_addresses_eql(&(IPh->saddr), &IP1) && are_ip_addresses_eql(&(IPh->daddr), &IP2) &&
+        sport == PORT1 && dport == PORT2) {
+        return 1;
+    }
+    
+    if (are_ip_addresses_eql(&(IPh->saddr), &IP2) && are_ip_addresses_eql(&(IPh->daddr), &IP1) &&
+        sport == PORT2 && dport == PORT1) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+void separator(int *print_separator) {
+    if (*print_separator) {
+        fprintf(OUT_INFO, " - ");
+    } else {
+        *print_separator = 1; // print it next time  
+    }
+}
+
+void print_tcp_control_bits(control_bits *pbits) {
+    int i;
+    control_bits bits = *pbits;
+    int print_separator = 0;
+    
+    for (i = 0; i < 8 ; i++) {
+        if (bits & control_bits_flags_array[i]) {
+            separator(&print_separator);
+            fprintf(OUT_INFO, control_bits_flags_names[i]);
+        }
+    }
+    
+    //fprintf(OUT_INFO, " 0x%02hhx", *pbits);
+}
+
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data) {
     eth_header *ETHh;
 	ETHh = (eth_header *) (pkt_data); 
@@ -167,8 +223,9 @@ void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     sport = ntohs( TCPh->sport );
     dport = ntohs( TCPh->dport );
     
-    if( ( dport == 21 || sport == 21 ) ) FTPpacket_handler(IPh, TCPh, header, pkt_data); 
-
+    if (global_communication_filter_ok(IPh, TCPh)) {
+        FTPpacket_handler(IPh, TCPh, header, pkt_data); 
+    }
 }
 
 
@@ -182,12 +239,11 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     tcp_len = TCPh->data_offset*4;
     sport = ntohs( TCPh->sport );
     dport = ntohs( TCPh->dport );
-
-	fprintf(OUT_INFO, "%d. packet (type: ",packet_counter++);
-	if(TCPh->ControlBits.SYN == 1 && TCPh->ControlBits.ACK == 1) fprintf(OUT_INFO, "SYNC - ACK");
-    else if(TCPh->ControlBits.SYN == 1) fprintf(OUT_INFO, "SYNC");
-    else if(TCPh->ControlBits.ACK == 1) fprintf(OUT_INFO, "ACK");
-    else fprintf(OUT_INFO, "don't care ;)");
+    
+    fprintf(OUT_INFO, "%d. packet (type: ",packet_counter++);
+    
+    print_tcp_control_bits(&(TCPh->ControlBits));
+    
     fprintf(OUT_INFO, ")\n");
     /* print ip addresses and udp ports */
     fprintf(OUT_INFO, "\t\tsource: %d.%d.%d.%d:%d\n\t\tdestination: %d.%d.%d.%d:%d\n",
