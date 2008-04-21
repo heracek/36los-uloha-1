@@ -178,7 +178,7 @@ int global_communication_filter_ok(const struct ip_header *IPh, const struct tcp
 
 void separator(int *print_separator) {
     if (*print_separator) {
-        fprintf(OUT_INFO, " - ");
+        fprintf(OUT_INFO, ", ");
     } else {
         *print_separator = 1; // print it next time  
     }
@@ -228,7 +228,6 @@ void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     }
 }
 
-
 void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data)
 {
     u_int tcp_len,ip_len;
@@ -240,16 +239,15 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     sport = ntohs( TCPh->sport );
     dport = ntohs( TCPh->dport );
     
-    fprintf(OUT_INFO, "%d. packet (type: ",packet_counter++);
-    
+    fprintf(OUT_INFO, "%d. packet %d > %d [", packet_counter++, sport, dport);
     print_tcp_control_bits(&(TCPh->ControlBits));
     
-    fprintf(OUT_INFO, ")\n");
-    /* print ip addresses and udp ports */
-    fprintf(OUT_INFO, "\t\tsource: %d.%d.%d.%d:%d\n\t\tdestination: %d.%d.%d.%d:%d\n",
-    		IPh->saddr.byte1,IPh->saddr.byte2,IPh->saddr.byte3,IPh->saddr.byte4,sport,
-    		IPh->daddr.byte1,IPh->daddr.byte2,IPh->daddr.byte3,IPh->daddr.byte4,dport);
-    fprintf(OUT_INFO, "\t\tSYNC#: %lu\n\t\tACK#: %lu\n",TCPh->seqnum,TCPh->acknum);
+    fprintf(OUT_INFO, "]\n");
+    fprintf(OUT_INFO, "\t\tSYNC#: %lu\n\t\tACK#: %lu\n\t\tWindow: %u\n",
+        ntohl(TCPh->seqnum),
+        ntohl(TCPh->acknum),
+        ntohs(TCPh->window)
+    );
     fprintf(OUT_INFO, "\t\tData: ");
       /* Print the packet */
     for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++) fprintf(OUT_INFO, "%c", pkt_data[i-1]);
