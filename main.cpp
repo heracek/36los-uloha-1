@@ -98,11 +98,14 @@ typedef struct computer_info {
     ip_address ip;
     u_short port;
     tcp_states tcp_state;
+    u_long  init_seq;
+    u_long  init_ack;
 } computer_info;
 
 /* global variables */
 computer_info server;
 computer_info client;
+u_long init_seq;
 FILE* OUT_DATA;
 FILE* OUT_INFO;
 
@@ -281,12 +284,14 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     process_packet_sent(scomp, IPh, TCPh);
     process_packet_received(dcomp, IPh, TCPh);
     
-    fprintf(OUT_INFO, "\t\tSYNC#: %lu\n\t\tACK#: %lu\n\t\tWindow: %u\n",
-        ntohl(TCPh->seqnum),
-        ntohl(TCPh->acknum),
-        ntohs(TCPh->window)
+    fprintf(OUT_INFO, "\t\tWindow: %lu\n\t\trelative SEQ#: %lu\n",
+        ntohs(TCPh->window),
+        ntohl(TCPh->seqnum) - scomp->init_seq
     );
     
+    if (TCPh->ControlBits & ACK) {
+        fprintf(OUT_INFO, "\t\trelative ACK#: %lu\n", ntohl(TCPh->acknum) - dcomp->init_seq);
+    }
     
     // fprintf(OUT_INFO, "\t\tData: ");
     //   /* Print the packet */
@@ -305,6 +310,15 @@ void process_packet_sent(computer_info* comp, const struct ip_header *IPh, const
             if (TCPh->ControlBits == (SYN)) {
                 comp->tcp_state = SYN_SENT;
                 report_changed_state(comp);
+                client.init_seq = ntohl(TCPh->seqnum);
+                server.init_seq = 0;
+                fprintf(OUT_INFO, "\t\tclient's Initial sequnce num: %lu\n", client.init_seq);
+            }
+            break;
+        case SYN_RECEIVED:
+            if (TCPh->ControlBits == (SYN | ACK)) {
+                server.init_seq = ntohl(TCPh->seqnum);
+                fprintf(OUT_INFO, "\t\tserver's Initial sequnce num: %lu\n", server.init_seq);
             }
             break;
 		case ESTABLISHED:

@@ -2,3 +2,5 @@ main
 out.data
 out.info
 build
+.DS_Store
+ftp.xcodeproj
