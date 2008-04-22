@@ -64,7 +64,7 @@ control_bits control_bits_flags_array[] = { CWR, ECE, URG, ACK, PSH, RST, SYN, F
 char* control_bits_flags_names[] = { "CWR", "ECE", "URG", "ACK", "PSH", "RST", "SYN", "FIN" };
 
 /* TCP header*/
-typedef struct tcp_header{
+typedef struct tcp_header {
     u_short sport;          // Source port
     u_short dport;          // Destination port
     u_long  seqnum;         // Sequence Number
@@ -76,20 +76,37 @@ typedef struct tcp_header{
     u_short urg_pointer;    // Urgent Pointer
 }tcp_header;
 
+typedef enum tcp_states {
+    CLOSED,
+    LISTEN,
+    SYN_RECEIVED,
+    SYN_SENT,
+    ESTABLISHED,
+    FIN_WAIT_1,
+    FIN_WAIT_2,
+    CLOSING,
+    TIME_WAIT,
+    CLOSE_WAIT,
+    LAST_ACK
+} tcp_states;
+
+typedef struct computer_info {
+    ip_address ip;
+    u_short port;
+    tcp_states tcp_state;
+} computer_info;
 
 /* global variables */
-ip_address IP1;
-u_short PORT1;
-ip_address IP2;
-u_short PORT2;
+computer_info server;
+computer_info client;
 FILE* OUT_DATA;
 FILE* OUT_INFO;
 
 /* prototype of the packet handler */
 void textIP2structIP(char *text_ip, ip_address *struct_ip);
-int are_ip_addresses_eql(ip_address *ip_address_1, ip_address *ip_address_2);
+int are_ip_addresses_eql(const ip_address *ip_address_1, const ip_address *ip_address_2);
 int global_communication_filter_ok(const struct ip_header *IPh, const struct tcp_header *TCPh);
-void print_tcp_control_bits(control_bits *pbits);
+void print_tcp_control_bits(const control_bits *pbits);
 void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void IPpacket_handler(const struct ip_header *IPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
@@ -100,7 +117,7 @@ int main(int argc, char *argv[])
     pcap_t *in = NULL;
     char errbuf[PCAP_ERRBUF_SIZE + 1];
     if (6 != argc) {
-        fprintf(stderr, "usage: %s soubor.vstup IP1 port IP2 port \n",argv[0]);
+        fprintf(stderr, "usage: %s soubor.vstup server_ip server_port client_ip client_port \n",argv[0]);
         exit(1);
     }
     
@@ -113,13 +130,13 @@ int main(int argc, char *argv[])
     OUT_INFO = fopen("out.info", "w");
     OUT_DATA = fopen("out.data", "w");
     
-    textIP2structIP(argv[2], &IP1);
-    sscanf(argv[3], "%d", &PORT1);
-    fprintf(OUT_INFO, "address 1: %d.%d.%d.%d:%d\n", IP1.byte1, IP1.byte2, IP1.byte3, IP1.byte4, PORT1);
-    
-    textIP2structIP(argv[4], &IP2);
-    sscanf(argv[5], "%d", &PORT2);
-    fprintf(OUT_INFO, "address 2: %d.%d.%d.%d:%d\n\n", IP2.byte1, IP2.byte2, IP2.byte3, IP2.byte4, PORT2);
+    textIP2structIP(argv[2], &(server.ip));
+    sscanf(argv[3], "%d", &server.port);
+    fprintf(OUT_INFO, "address 1: %d.%d.%d.%d:%d\n", server.ip.byte1, server.ip.byte2, server.ip.byte3, server.ip.byte4, server.port);
+    printf(argv[4]);
+    textIP2structIP(argv[4], &(client.ip));
+    sscanf(argv[5], "%d", &client.port);
+    fprintf(OUT_INFO, "address 2: %d.%d.%d.%d:%d\n\n", client.ip.byte1, client.ip.byte2, client.ip.byte3, client.ip.byte4, client.port);
     
     pcap_loop(in, 0, packet_handler, NULL);
     
@@ -144,7 +161,7 @@ void textIP2structIP(char *text_ip, ip_address *struct_ip) {
 /**
  * Returns 1 if (ip_address_1 == ip_address_2). Else returns 0.
  */
-int are_ip_addresses_eql(ip_address *ip_address_1, ip_address *ip_address_2) {
+int are_ip_addresses_eql(const ip_address *ip_address_1, const ip_address *ip_address_2) {
     if (ip_address_1->byte1 == ip_address_2->byte1 &&
         ip_address_1->byte2 == ip_address_2->byte2 &&
         ip_address_1->byte3 == ip_address_2->byte3 &&
@@ -156,20 +173,20 @@ int are_ip_addresses_eql(ip_address *ip_address_1, ip_address *ip_address_2) {
 }
 
 /**
- * Returns 1 if communication is betwen IP1:PORT1 and IP2:PORT2. Else reutrns 0.
+ * Returns 1 if communication is betwen server and clietn. Else reutrns 0.
  */
 int global_communication_filter_ok(const struct ip_header *IPh, const struct tcp_header *TCPh) {
     u_short sport = ntohs( TCPh->sport );
     u_short dport = ntohs( TCPh->dport );
     
-    /* src is IP1 - dest is IP2 */
-    if (are_ip_addresses_eql(&(IPh->saddr), &IP1) && are_ip_addresses_eql(&(IPh->daddr), &IP2) &&
-        sport == PORT1 && dport == PORT2) {
+    /* src is server - dest is clietn */
+    if (are_ip_addresses_eql(&(IPh->saddr), &server.ip) && are_ip_addresses_eql(&(IPh->daddr), &client.ip) &&
+        sport == server.port && dport == client.port) {
         return 1;
     }
     
-    if (are_ip_addresses_eql(&(IPh->saddr), &IP2) && are_ip_addresses_eql(&(IPh->daddr), &IP1) &&
-        sport == PORT2 && dport == PORT1) {
+    if (are_ip_addresses_eql(&(IPh->saddr), &client.ip) && are_ip_addresses_eql(&(IPh->daddr), &server.ip) &&
+        sport == client.port && dport == server.port) {
         return 1;
     }
     
@@ -184,7 +201,7 @@ void separator(int *print_separator) {
     }
 }
 
-void print_tcp_control_bits(control_bits *pbits) {
+void print_tcp_control_bits(const control_bits *pbits) {
     int i;
     control_bits bits = *pbits;
     int print_separator = 0;
@@ -216,8 +233,6 @@ void IPpacket_handler(const struct ip_header *IPh, const struct pcap_pkthdr *hea
 void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data) {
     u_int tcp_len;
     u_short sport,dport;
-    int i;
-
     tcp_len = TCPh->data_offset*4;
     
     sport = ntohs( TCPh->sport );
@@ -235,7 +250,7 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     int i;
 
     ip_len = (IPh->ver_ihl & 0xf) * 4;
-    tcp_len = TCPh->data_offset*4;
+    tcp_len = TCPh->data_offset * 4;
     sport = ntohs( TCPh->sport );
     dport = ntohs( TCPh->dport );
     
@@ -250,6 +265,7 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     );
     fprintf(OUT_INFO, "\t\tData: ");
       /* Print the packet */
-    for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++) fprintf(OUT_INFO, "%c", pkt_data[i-1]);
+    for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++)
+        fprintf(OUT_INFO, "%c", pkt_data[i-1]);
     fprintf(OUT_INFO, "\n");
 }

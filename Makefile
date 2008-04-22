@@ -1,17 +1,17 @@
 # all after symbol '#' is comment
 
 # === which communication library to use ===
-CC	=	gcc
+CC	=	g++
 CFLAGS	=      
 LIBS	=	-lpcap
 
-default:	dohnaj1
+default:	main
 
-dohnaj1:dohnaj1.c
-	$(CC) $(CFLAGS) -o dohnaj1 dohnaj1.c $(LIBS)
+main:main.cpp
+	$(CC) $(CFLAGS) -o main main.cpp $(LIBS)
 
 clear:
-	\rm dohnaj1 out.data out.info
+	\rm main out.data out.info
 
-run:dohnaj1
-	./dohnaj1 ftp.dump 85.71.135.84 21 192.168.72.151 57073
+run:main
+	./main ftp.dump 85.71.135.84 21 192.168.72.151 57073
