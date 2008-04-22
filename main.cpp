@@ -77,20 +77,24 @@ typedef struct tcp_header {
 }tcp_header;
 
 typedef enum tcp_states {
-    CLOSED,
-    LISTEN,
-    SYN_RECEIVED,
-    SYN_SENT,
-    ESTABLISHED,
-    FIN_WAIT_1,
-    FIN_WAIT_2,
-    CLOSING,
-    TIME_WAIT,
-    CLOSE_WAIT,
-    LAST_ACK
+    CLOSED = 0,
+    LISTEN = 1,
+    SYN_RECEIVED = 2,
+    SYN_SENT = 3,
+    ESTABLISHED = 4,
+    FIN_WAIT_1 = 5,
+    FIN_WAIT_2 = 6,
+    CLOSING = 7,
+    TIME_WAIT = 8,
+    CLOSE_WAIT = 9,
+    LAST_ACK = 10,
+    ERROR = -1
 } tcp_states;
 
+char* tcp_states_names[] = { "CLOSED", "LISTEN", "SYN_RECEIVED", "SYN_SENT", "ESTABLISHED", "FIN_WAIT_1", "FIN_WAIT_2", "CLOSING", "TIME_WAIT", "CLOSE_WAIT", "LAST_ACK" };
+
 typedef struct computer_info {
+    char *name;
     ip_address ip;
     u_short port;
     tcp_states tcp_state;
@@ -111,6 +115,8 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 void IPpacket_handler(const struct ip_header *IPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
+void process_packet_sent(computer_info* scomp, const struct ip_header *IPh, const struct tcp_header *TCPh);
+void process_packet_received(computer_info* comp, const struct ip_header *IPh, const struct tcp_header *TCPh);
 
 int main(int argc, char *argv[])
 {
@@ -130,13 +136,17 @@ int main(int argc, char *argv[])
     OUT_INFO = fopen("out.info", "w");
     OUT_DATA = fopen("out.data", "w");
     
+    server.name = "server";
     textIP2structIP(argv[2], &(server.ip));
     sscanf(argv[3], "%d", &server.port);
-    fprintf(OUT_INFO, "address 1: %d.%d.%d.%d:%d\n", server.ip.byte1, server.ip.byte2, server.ip.byte3, server.ip.byte4, server.port);
-    printf(argv[4]);
+	server.tcp_state = LISTEN;
+    fprintf(OUT_INFO, "%s: %d.%d.%d.%d:%d - initial state: %s\n", server.name, server.ip.byte1, server.ip.byte2, server.ip.byte3, server.ip.byte4, server.port, tcp_states_names[server.tcp_state]);
+    
+    client.name = "client";
     textIP2structIP(argv[4], &(client.ip));
     sscanf(argv[5], "%d", &client.port);
-    fprintf(OUT_INFO, "address 2: %d.%d.%d.%d:%d\n\n", client.ip.byte1, client.ip.byte2, client.ip.byte3, client.ip.byte4, client.port);
+    client.tcp_state = CLOSED;
+    fprintf(OUT_INFO, "%s: %d.%d.%d.%d:%d  - initial state: %s\n\n", client.name, client.ip.byte1, client.ip.byte2, client.ip.byte3, client.ip.byte4, client.port, tcp_states_names[client.tcp_state]);
     
     pcap_loop(in, 0, packet_handler, NULL);
     
@@ -247,25 +257,113 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
 {
     u_int tcp_len,ip_len;
     u_short sport,dport;
-    int i;
-
+    
     ip_len = (IPh->ver_ihl & 0xf) * 4;
     tcp_len = TCPh->data_offset * 4;
     sport = ntohs( TCPh->sport );
     dport = ntohs( TCPh->dport );
     
-    fprintf(OUT_INFO, "%d. packet %d > %d [", packet_counter++, sport, dport);
-    print_tcp_control_bits(&(TCPh->ControlBits));
+    computer_info *scomp;
+    computer_info *dcomp;
     
+    if (sport == server.port) {
+        scomp = &server;
+        dcomp = &client;
+    } else {
+        scomp = &client;
+        dcomp = &server;
+    }
+    
+    fprintf(OUT_INFO, "%d. packet %s{%s} > %s{%s} [", packet_counter++, scomp->name, tcp_states_names[scomp->tcp_state], dcomp->name, tcp_states_names[dcomp->tcp_state]);
+    print_tcp_control_bits(&(TCPh->ControlBits));
     fprintf(OUT_INFO, "]\n");
+    
+    process_packet_sent(scomp, IPh, TCPh);
+    process_packet_received(dcomp, IPh, TCPh);
+    
     fprintf(OUT_INFO, "\t\tSYNC#: %lu\n\t\tACK#: %lu\n\t\tWindow: %u\n",
         ntohl(TCPh->seqnum),
         ntohl(TCPh->acknum),
         ntohs(TCPh->window)
     );
-    fprintf(OUT_INFO, "\t\tData: ");
-      /* Print the packet */
-    for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++)
-        fprintf(OUT_INFO, "%c", pkt_data[i-1]);
-    fprintf(OUT_INFO, "\n");
+    
+    
+    // fprintf(OUT_INFO, "\t\tData: ");
+    //   /* Print the packet */
+    // for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++)
+    //     fprintf(OUT_INFO, "%c", pkt_data[i-1]);
+    // fprintf(OUT_INFO, "\n");
+}
+
+void report_changed_state(computer_info *comp) {
+    fprintf(OUT_INFO, "\t\t%s -> {%s}\n", comp->name, tcp_states_names[comp->tcp_state]);
+}
+
+void process_packet_sent(computer_info* comp, const struct ip_header *IPh, const struct tcp_header *TCPh) {
+    switch (comp->tcp_state) {
+        case CLOSED:
+            if (TCPh->ControlBits == (SYN)) {
+                comp->tcp_state = SYN_SENT;
+                report_changed_state(comp);
+            }
+            break;
+		case ESTABLISHED:
+            if (TCPh->ControlBits & (FIN)) {
+                comp->tcp_state = FIN_WAIT_1;
+                report_changed_state(comp);
+            }
+            break;
+		case CLOSE_WAIT:
+            if (TCPh->ControlBits & (FIN)) {
+                comp->tcp_state = LAST_ACK;
+                report_changed_state(comp);
+				comp->tcp_state = CLOSED;
+                report_changed_state(comp);
+            }
+            break;
+    }
+}
+
+void process_packet_received(computer_info* comp, const struct ip_header *IPh, const struct tcp_header *TCPh) {
+    switch (comp->tcp_state) {
+        case LISTEN:
+            if (TCPh->ControlBits == (SYN)) {
+                comp->tcp_state = SYN_RECEIVED;
+                report_changed_state(comp);
+            }
+            break;
+        case SYN_RECEIVED:
+            if (TCPh->ControlBits == (ACK)) {
+                comp->tcp_state = ESTABLISHED;
+                report_changed_state(comp);
+            }
+            break;
+        case SYN_SENT:
+            if (TCPh->ControlBits == (SYN | ACK)) {
+                comp->tcp_state = ESTABLISHED;
+                report_changed_state(comp);
+            }
+            break;
+        case FIN_WAIT_1:
+            if (TCPh->ControlBits & ACK) {
+                comp->tcp_state = FIN_WAIT_2;
+                report_changed_state(comp);
+            }
+            break;
+		case FIN_WAIT_2:
+            if (TCPh->ControlBits & FIN) {
+                comp->tcp_state = TIME_WAIT;
+                report_changed_state(comp);
+				comp->tcp_state = CLOSED;
+                report_changed_state(comp);
+            }
+            break;
+		case ESTABLISHED:
+            if (TCPh->ControlBits & FIN) {
+                comp->tcp_state = CLOSE_WAIT;
+                report_changed_state(comp);
+            }
+            break;
+
+    }
 }
