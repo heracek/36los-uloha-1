@@ -302,11 +302,10 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     
     print_mss_if_changed(((const u_char *) TCPh) + 20, (TCPh->data_offset >> 4) * 4 - 20);
     
-    // fprintf(OUT_INFO, "\t\tData: ");
-    //   /* Print the packet */
-    // for (i=(SIZE_ETHERNET + ip_len + tcp_len ); (i < header->caplen + 1) ; i++)
-    //     fprintf(OUT_INFO, "%c", pkt_data[i-1]);
-    // fprintf(OUT_INFO, "\n");
+    //fprintf(OUT_INFO, "\t\tIP:: head len: %u, total len: %u\n", (IPh->ver_ihl & 0x0f) * 4, ntohs(IPh->tlen));
+    u_short tcp_data_len = ntohs(IPh->tlen) - (IPh->ver_ihl & 0x0f) * 4 - (TCPh->data_offset >> 4) * 4;
+    fprintf(OUT_INFO, "\t\tTPC data len: %d\n", tcp_data_len);
+    
 }
 
 void report_changed_state(computer_info *comp) {
@@ -393,7 +392,6 @@ void process_packet_received(computer_info* comp, const struct ip_header *IPh, c
 
 void print_mss_if_changed(const u_char* tcp_options, int len) {
     u_int mss;
-    printf("%d\n", len);
     for (int i = 0; i < len; i += 4) {
         if (tcp_options[i] == 0x02 && tcp_options[i + 1] == 0x04) {
             mss = tcp_options[i + 2];
