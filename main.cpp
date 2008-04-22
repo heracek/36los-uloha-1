@@ -99,8 +99,7 @@ typedef struct computer_info {
     u_short port;
     tcp_states tcp_state;
     u_long init_seq;
-    u_long sent_len;
-    u_long received_len;
+    char *prompt;
 } computer_info;
 
 /* global variables */
@@ -144,12 +143,14 @@ int main(int argc, char *argv[])
     OUT_DATA = fopen("out.data", "w");
     
     server.name = "server";
+    server.prompt = "<<< ";
     textIP2structIP(argv[2], &(server.ip));
     sscanf(argv[3], "%d", &server.port);
 	server.tcp_state = LISTEN;
     fprintf(OUT_INFO, "%s: %d.%d.%d.%d:%d - initial state: %s\n", server.name, server.ip.byte1, server.ip.byte2, server.ip.byte3, server.ip.byte4, server.port, tcp_states_names[server.tcp_state]);
     
     client.name = "client";
+    client.prompt = ">>> ";
     textIP2structIP(argv[4], &(client.ip));
     sscanf(argv[5], "%d", &client.port);
     client.tcp_state = CLOSED;
@@ -306,6 +307,13 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     u_short tcp_data_len = ntohs(IPh->tlen) - (IPh->ver_ihl & 0x0f) * 4 - (TCPh->data_offset >> 4) * 4;
     fprintf(OUT_INFO, "\t\tTPC data len: %d\n", tcp_data_len);
     
+    if (tcp_data_len) {
+        const u_char *tcp_data = ((const u_char *) TCPh) + (TCPh->data_offset >> 4) * 4;
+        fprintf(OUT_DATA, scomp->prompt);
+        for (int i = 0; i < tcp_data_len; i++) {
+            fputc(*(tcp_data++), OUT_DATA);
+        }
+    }
 }
 
 void report_changed_state(computer_info *comp) {
