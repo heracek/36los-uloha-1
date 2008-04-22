@@ -69,7 +69,7 @@ typedef struct tcp_header {
     u_short dport;          // Destination port
     u_long  seqnum;         // Sequence Number
     u_long  acknum;         // Acknowledgment Number
-	char data_offset; 		// Data Offset
+	u_char data_offset; 		// Data Offset
 	control_bits ControlBits; // Control Bits
     u_short window; 	    // Window
     u_short crc;            // Checksum
@@ -98,14 +98,15 @@ typedef struct computer_info {
     ip_address ip;
     u_short port;
     tcp_states tcp_state;
-    u_long  init_seq;
-    u_long  init_ack;
+    u_long init_seq;
+    u_long sent_len;
+    u_long received_len;
 } computer_info;
 
 /* global variables */
 computer_info server;
 computer_info client;
-u_long init_seq;
+u_int global_mss;
 FILE* OUT_DATA;
 FILE* OUT_INFO;
 
@@ -120,9 +121,12 @@ void TCPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
 void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCPh, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void process_packet_sent(computer_info* scomp, const struct ip_header *IPh, const struct tcp_header *TCPh);
 void process_packet_received(computer_info* comp, const struct ip_header *IPh, const struct tcp_header *TCPh);
+void print_mss_if_changed(const u_char* tcp_options, int len);
 
 int main(int argc, char *argv[])
 {
+    global_mss = 0;
+    
     pcap_t *in = NULL;
     char errbuf[PCAP_ERRBUF_SIZE + 1];
     if (6 != argc) {
@@ -261,6 +265,7 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     u_int tcp_len,ip_len;
     u_short sport,dport;
     
+    
     ip_len = (IPh->ver_ihl & 0xf) * 4;
     tcp_len = TCPh->data_offset * 4;
     sport = ntohs( TCPh->sport );
@@ -292,6 +297,10 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     if (TCPh->ControlBits & ACK) {
         fprintf(OUT_INFO, "\t\trelative ACK#: %lu\n", ntohl(TCPh->acknum) - dcomp->init_seq);
     }
+    
+    fprintf(OUT_INFO, "\t\tData offset: %u\n", (TCPh->data_offset >> 4) * 4);
+    
+    print_mss_if_changed(((const u_char *) TCPh) + 20, (TCPh->data_offset >> 4) * 4 - 20);
     
     // fprintf(OUT_INFO, "\t\tData: ");
     //   /* Print the packet */
@@ -379,5 +388,21 @@ void process_packet_received(computer_info* comp, const struct ip_header *IPh, c
             }
             break;
 
+    }
+}
+
+void print_mss_if_changed(const u_char* tcp_options, int len) {
+    u_int mss;
+    printf("%d\n", len);
+    for (int i = 0; i < len; i += 4) {
+        if (tcp_options[i] == 0x02 && tcp_options[i + 1] == 0x04) {
+            mss = tcp_options[i + 2];
+            mss <<= 8;
+            mss += tcp_options[i + 3]; 
+            if (global_mss != mss) {
+                global_mss = mss;
+                fprintf(OUT_INFO, "\t\tMSS: %u\n", mss);
+            }
+        }
     }
 }
