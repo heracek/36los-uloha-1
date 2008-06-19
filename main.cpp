@@ -7,6 +7,7 @@
 #include <time.h>
 #define SIZE_ETHERNET 14
 
+
 int packet_counter = 0; 
 
 /* 6 bytes MAC address */
