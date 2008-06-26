@@ -77,6 +77,13 @@ typedef struct tcp_header {
     u_short urg_pointer;    // Urgent Pointer
 }tcp_header;
 
+typedef struct tcp_buffer {
+	u_char * data;
+	u_long   data_len;
+	u_long   seqnum;
+	tcp_buffer * next;
+} tcp_buffer;
+
 typedef enum tcp_states {
     CLOSED = 0,
     LISTEN = 1,
@@ -100,6 +107,8 @@ typedef struct computer_info {
     u_short port;
     tcp_states tcp_state;
     u_long init_seq;
+    u_long last_seq;
+    u_long last_ack;
     char *prompt;
 } computer_info;
 
@@ -246,6 +255,19 @@ void IPpacket_handler(const struct ip_header *IPh, const struct pcap_pkthdr *hea
     u_int ip_len;
 
     ip_len = (IPh->ver_ihl & 0xf) * 4;
+    
+
+
+
+    if(  ntohs(IPh->flags_fo) & 0x0 ) 	// ========== nefragmentace 	   [010 0000000000000]
+    									// ========== fragmentace 	       [001 0000000000000]
+    									// ========== posledni fragmentace [000 0000000000000]
+
+
+
+
+    									
+    
 	TCPpacket_handler( IPh, (tcp_header *) ((u_char*)IPh + ip_len), header, pkt_data); 
 }
 
@@ -291,11 +313,17 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     process_packet_sent(scomp, IPh, TCPh);
     process_packet_received(dcomp, IPh, TCPh);
     
-    fprintf(OUT_INFO, "\t\tWindow: %lu\n\t\trelative SEQ#: %lu\n",
+    fprintf(OUT_INFO, "\t\tWindow: %lu\n\t\trelative SEQ#: %lu ",
         ntohs(TCPh->window),
         ntohl(TCPh->seqnum) - scomp->init_seq
     );
-    
+
+	if (TCPh->ControlBits & PSH) {
+    	if (scomp->last_seq>=(ntohl(TCPh->seqnum) - scomp->init_seq)) fprintf(OUT_INFO,"(repeating)"); 
+    	scomp->last_seq=ntohl(TCPh->seqnum) - scomp->init_seq;
+	}    
+	fprintf(OUT_INFO,"\n");
+	
     if (TCPh->ControlBits & ACK) {
         fprintf(OUT_INFO, "\t\trelative ACK#: %lu\n", ntohl(TCPh->acknum) - dcomp->init_seq);
     }
@@ -308,6 +336,16 @@ void FTPpacket_handler(const struct ip_header *IPh, const struct tcp_header *TCP
     u_short tcp_data_len = ntohs(IPh->tlen) - (IPh->ver_ihl & 0x0f) * 4 - (TCPh->data_offset >> 4) * 4;
     fprintf(OUT_INFO, "\t\tTPC data len: %d\n", tcp_data_len);
     
+
+
+	// VYRESIT sparvne poradi SEQ ;) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	// 
+	// - doplnim data do bufferu (dle SEQ)
+	// - pak vypisuju z bufferu pokud SEQ=last_ack, last_ack=SEQ+data_len ... dokud neni konec, nebo se nerovna last_ack=SEQ
+	// 
+	//
+	// memcpy();
+
     if (tcp_data_len) {
         const u_char *tcp_data = ((const u_char *) TCPh) + (TCPh->data_offset >> 4) * 4;
         fprintf(OUT_DATA, scomp->prompt);
